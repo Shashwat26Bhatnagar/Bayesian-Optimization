@@ -54,18 +54,28 @@ def main():
                            if f.startswith("gpei_batch_")])
     n_bnd_gpei = len([f for f in os.listdir(args.bnd_dir)
                       if f.startswith("gpei_batch_")])
-    n_bnd_iter0 = len([f for f in os.listdir(args.bnd_dir)
-                       if f.startswith("bnd_iter0_batch_")])
 
+    # auto-detect all bnd_iter* groups (iter0, iter1, iter2, ...)
+    import re
+    iter_ids = sorted({int(m.group(1))
+                       for f in os.listdir(args.bnd_dir)
+                       for m in [re.match(r"bnd_iter(\d+)_batch_\d+\.csv", f)]
+                       if m})
+    bnd_iters = {}  # {iter_id: np.array of yields}
+    for it in iter_ids:
+        n = len([f for f in os.listdir(args.bnd_dir)
+                 if f.startswith(f"bnd_iter{it}_batch_")])
+        bnd_iters[it] = collect(args.bnd_dir, f"bnd_iter{it}_batch", n)
+
+    n_bnd_total = sum(len(v) for v in bnd_iters.values())
     print(f"Baseline: {n_baseline_random} random + {n_baseline_gpei} gpei")
-    print(f"BND:      {n_bnd_gpei} gpei + {n_bnd_iter0} bnd_iter0")
+    iter_summary = " + ".join(f"{len(bnd_iters[it])} iter{it}" for it in iter_ids)
+    print(f"BND:      {n_bnd_gpei} gpei + {iter_summary}")
 
     # --- load yields ---
     bl_rand = collect(args.baseline_dir, "random_batch", n_baseline_random)
     bl_gpei = collect(args.baseline_dir, "gpei_batch", n_baseline_gpei)
-
     bnd_gpei = collect(args.bnd_dir, "gpei_batch", n_bnd_gpei)
-    bnd_iter0 = collect(args.bnd_dir, "bnd_iter0_batch", n_bnd_iter0)
 
     # running best / avg for baseline (random + gpei combined)
     bl_all = np.concatenate([bl_rand, bl_gpei])
@@ -73,8 +83,8 @@ def main():
     bl_avg = np.cumsum(bl_all) / np.arange(1, bl_all.size + 1)
     bl_x = np.arange(bl_all.size)
 
-    # running best / avg for bnd (gpei + bnd_iter0)
-    bnd_all = np.concatenate([bnd_gpei, bnd_iter0])
+    # running best / avg for bnd (gpei + all iters in order)
+    bnd_all = np.concatenate([bnd_gpei] + [bnd_iters[it] for it in iter_ids])
     bnd_best = np.maximum.accumulate(bnd_all)
     bnd_avg = np.cumsum(bnd_all) / np.arange(1, bnd_all.size + 1)
     bnd_x = np.arange(bnd_all.size)
@@ -86,7 +96,11 @@ def main():
     C_BL_BEST = "#dc2626"    # red line
     C_BL_AVG = "#06b6d4"     # cyan dashed
     C_BND_GPEI = "#9333ea"   # purple
-    C_BND_ITER = "#f97316"   # orange
+    # one colour per iteration, cycling if many
+    ITER_COLORS = ["#f97316", "#e11d48", "#0d9488", "#7c3aed",
+                   "#ca8a04", "#4f46e5", "#be185d", "#059669"]
+    ITER_SYMBOLS = ["hexagon2", "triangle-up", "square", "cross",
+                    "pentagon", "star-triangle-up", "bowtie", "hourglass"]
     C_BND_BEST = "#c2410c"   # dark orange line
     C_BND_AVG = "#a855f7"    # light purple dashed
 
@@ -138,13 +152,19 @@ def main():
         hovertemplate="batch %{x}<br>yield: %{y:.1f} kg",
     ))
 
-    # --- bnd iter0 ---
-    fig.add_trace(go.Scatter(
-        x=np.arange(n_bnd_gpei, bnd_all.size), y=bnd_iter0, mode="markers",
-        marker=dict(symbol="hexagon2", size=9, color=C_BND_ITER),
-        name=f"BND iter0 ({n_bnd_iter0})",
-        hovertemplate="batch %{x}<br>yield: %{y:.1f} kg",
-    ))
+    # --- bnd iterations (iter0, iter1, ...) ---
+    offset = n_bnd_gpei
+    for i, it in enumerate(iter_ids):
+        arr = bnd_iters[it]
+        c = ITER_COLORS[i % len(ITER_COLORS)]
+        sym = ITER_SYMBOLS[i % len(ITER_SYMBOLS)]
+        fig.add_trace(go.Scatter(
+            x=np.arange(offset, offset + len(arr)), y=arr, mode="markers",
+            marker=dict(symbol=sym, size=9, color=c),
+            name=f"BND iter{it} ({len(arr)})",
+            hovertemplate="batch %{x}<br>yield: %{y:.1f} kg",
+        ))
+        offset += len(arr)
 
     # --- bnd running best ---
     fig.add_trace(go.Scatter(
@@ -184,12 +204,13 @@ def main():
     # --- summary table ---
     print(f"\n{'':30s} {'mean':>10s} {'std':>10s} {'best':>10s} {'worst':>10s}")
     print("-" * 72)
-    for label, arr in [
+    rows = [
         (f"Baseline random ({n_baseline_random})", bl_rand),
         (f"Baseline GPEI ({n_baseline_gpei})", bl_gpei),
         (f"BND GPEI ({n_bnd_gpei})", bnd_gpei),
-        (f"BND iter0 ({n_bnd_iter0})", bnd_iter0),
-    ]:
+    ] + [(f"BND iter{it} ({len(bnd_iters[it])})", bnd_iters[it])
+         for it in iter_ids]
+    for label, arr in rows:
         print(f"{label:30s} {arr.mean():10.1f} {arr.std():10.1f} "
               f"{arr.max():10.1f} {arr.min():10.1f}")
     print("-" * 72)
