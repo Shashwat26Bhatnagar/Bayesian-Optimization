@@ -89,70 +89,94 @@ def main():
     bnd_avg = np.cumsum(bnd_all) / np.arange(1, bnd_all.size + 1)
     bnd_x = np.arange(bnd_all.size)
 
-    # --- colours ---
-    C_BASE = "#b91c1c"       # dark red diamond
-    C_BL_RAND = "#15803d"    # green
-    C_BL_GPEI = "#2563eb"    # blue
-    C_BL_BEST = "#dc2626"    # red line
-    C_BL_AVG = "#06b6d4"     # cyan dashed
-    C_BND_GPEI = "#9333ea"   # purple
-    # one colour per iteration, cycling if many
-    ITER_COLORS = ["#f97316", "#e11d48", "#0d9488", "#7c3aed",
-                   "#ca8a04", "#4f46e5", "#be185d", "#059669"]
+    # --- high-contrast palette ---
+    # top subplot (baseline)
+    C_BASE      = "#000000"   # black diamond
+    C_BL_RAND   = "#2ca02c"   # vivid green
+    C_BL_GPEI   = "#1f77b4"   # strong blue
+    C_BL_BEST   = "#d62728"   # bright red
+    C_BL_AVG    = "#ff7f0e"   # orange dashed
+
+    # bottom subplot (bnd)
+    C_BND_GPEI  = "#9467bd"   # purple
+    ITER_COLORS = ["#e377c2", "#17becf", "#bcbd22", "#d62728",
+                   "#8c564b", "#1f77b4", "#ff7f0e", "#2ca02c"]
     ITER_SYMBOLS = ["hexagon2", "triangle-up", "square", "cross",
                     "pentagon", "star-triangle-up", "bowtie", "hourglass"]
-    C_BND_BEST = "#c2410c"   # dark orange line
-    C_BND_AVG = "#a855f7"    # light purple dashed
+    C_BND_BEST  = "#d62728"   # bright red
+    C_BND_AVG   = "#ff7f0e"   # orange dashed
 
-    fig = go.Figure()
+    # shared y-axis range for fair visual comparison
+    all_yields = np.concatenate([bl_all, bnd_all])
+    y_lo = min(all_yields.min(), BASE_YIELD) - 100
+    y_hi = all_yields.max() + 100
 
-    # --- base yield ---
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=["Baseline BO", "BND"],
+        shared_xaxes=False,
+        vertical_spacing=0.12,
+    )
+
+    # ===================== TOP: Baseline =====================
+
     fig.add_trace(go.Scatter(
         x=[0], y=[BASE_YIELD], mode="markers",
-        marker=dict(symbol="diamond", size=12, color=C_BASE),
+        marker=dict(symbol="diamond", size=12, color=C_BASE,
+                    line=dict(width=1, color="#555")),
         name=f"Base yield ({BASE_YIELD:.0f} kg)",
-    ))
+        legendgroup="baseline",
+    ), row=1, col=1)
 
-    # --- baseline random ---
     fig.add_trace(go.Scatter(
         x=np.arange(n_baseline_random), y=bl_rand, mode="markers",
-        marker=dict(symbol="star", size=8, color=C_BL_RAND),
-        name=f"Baseline random ({n_baseline_random})",
+        marker=dict(symbol="star", size=9, color=C_BL_RAND),
+        name=f"Random starts ({n_baseline_random})",
         hovertemplate="batch %{x}<br>yield: %{y:.1f} kg",
-    ))
+        legendgroup="baseline",
+    ), row=1, col=1)
 
-    # --- baseline gpei ---
     fig.add_trace(go.Scatter(
         x=np.arange(n_baseline_random, bl_all.size), y=bl_gpei,
         mode="markers",
-        marker=dict(symbol="circle", size=3, color=C_BL_GPEI, opacity=0.5),
-        name=f"Baseline GPEI ({n_baseline_gpei})",
+        marker=dict(symbol="circle", size=3, color=C_BL_GPEI, opacity=0.45),
+        name=f"GPEI ({n_baseline_gpei})",
         hovertemplate="batch %{x}<br>yield: %{y:.1f} kg",
-    ))
+        legendgroup="baseline",
+    ), row=1, col=1)
 
-    # --- baseline running best ---
     fig.add_trace(go.Scatter(
         x=bl_x, y=bl_best, mode="lines",
-        line=dict(color=C_BL_BEST, width=1.5),
-        name=f"Baseline best so far ({bl_all.max():.1f} kg)",
-    ))
+        line=dict(color=C_BL_BEST, width=2),
+        name=f"Best so far ({bl_all.max():.1f} kg)",
+        legendgroup="baseline",
+    ), row=1, col=1)
 
-    # --- baseline running avg ---
     fig.add_trace(go.Scatter(
         x=bl_x, y=bl_avg, mode="lines",
-        line=dict(color=C_BL_AVG, width=1.5, dash="dash"),
-        name=f"Baseline avg so far ({bl_all.mean():.1f} kg)",
-    ))
+        line=dict(color=C_BL_AVG, width=2, dash="dash"),
+        name=f"Avg so far ({bl_all.mean():.1f} kg)",
+        legendgroup="baseline",
+    ), row=1, col=1)
 
-    # --- bnd gpei ---
+    # ===================== BOTTOM: BND =====================
+
+    fig.add_trace(go.Scatter(
+        x=[0], y=[BASE_YIELD], mode="markers",
+        marker=dict(symbol="diamond", size=12, color=C_BASE,
+                    line=dict(width=1, color="#555")),
+        name=f"Base yield ({BASE_YIELD:.0f} kg)",
+        legendgroup="bnd", showlegend=False,
+    ), row=2, col=1)
+
     fig.add_trace(go.Scatter(
         x=np.arange(n_bnd_gpei), y=bnd_gpei, mode="markers",
-        marker=dict(symbol="diamond", size=8, color=C_BND_GPEI),
-        name=f"BND GPEI ({n_bnd_gpei})",
+        marker=dict(symbol="diamond", size=9, color=C_BND_GPEI),
+        name=f"GPEI ({n_bnd_gpei})",
         hovertemplate="batch %{x}<br>yield: %{y:.1f} kg",
-    ))
+        legendgroup="bnd",
+    ), row=2, col=1)
 
-    # --- bnd iterations (iter0, iter1, ...) ---
     offset = n_bnd_gpei
     for i, it in enumerate(iter_ids):
         arr = bnd_iters[it]
@@ -161,42 +185,48 @@ def main():
         fig.add_trace(go.Scatter(
             x=np.arange(offset, offset + len(arr)), y=arr, mode="markers",
             marker=dict(symbol=sym, size=9, color=c),
-            name=f"BND iter{it} ({len(arr)})",
+            name=f"iter{it} ({len(arr)})",
             hovertemplate="batch %{x}<br>yield: %{y:.1f} kg",
-        ))
+            legendgroup="bnd",
+        ), row=2, col=1)
         offset += len(arr)
 
-    # --- bnd running best ---
     fig.add_trace(go.Scatter(
         x=bnd_x, y=bnd_best, mode="lines",
         line=dict(color=C_BND_BEST, width=2),
-        name=f"BND best so far ({bnd_all.max():.1f} kg)",
-    ))
+        name=f"Best so far ({bnd_all.max():.1f} kg)",
+        legendgroup="bnd",
+    ), row=2, col=1)
 
-    # --- bnd running avg ---
     fig.add_trace(go.Scatter(
         x=bnd_x, y=bnd_avg, mode="lines",
         line=dict(color=C_BND_AVG, width=2, dash="dash"),
-        name=f"BND avg so far ({bnd_all.mean():.1f} kg)",
-    ))
+        name=f"Avg so far ({bnd_all.mean():.1f} kg)",
+        legendgroup="bnd",
+    ), row=2, col=1)
+
+    # ===================== Layout =====================
+
+    fig.update_yaxes(title_text="Yield (kg)", range=[y_lo, y_hi], row=1, col=1)
+    fig.update_yaxes(title_text="Yield (kg)", range=[y_lo, y_hi], row=2, col=1)
+    fig.update_xaxes(title_text="Batch index", row=1, col=1)
+    fig.update_xaxes(title_text="Batch index", row=2, col=1)
 
     fig.update_layout(
         title=dict(
-            text="Baseline BO vs BND — Penicillin Batch Yield",
+            text="Penicillin Batch Yield — Baseline BO vs BND",
             font=dict(size=18),
         ),
-        xaxis_title="Batch index",
-        yaxis_title="Yield (kg)",
         template="plotly_white",
         legend=dict(
             font=dict(size=11),
-            bgcolor="rgba(255,255,255,0.85)",
-            bordercolor="#ddd",
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#ccc",
             borderwidth=1,
         ),
         hovermode="closest",
-        height=600,
-        margin=dict(t=60, b=50),
+        height=800,
+        margin=dict(t=70, b=50),
     )
 
     fig.write_html(args.out, include_plotlyjs="cdn")
